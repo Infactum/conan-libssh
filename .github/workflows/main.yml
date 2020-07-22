@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-18.04, ubuntu-20.04, windows-2019]
+        version: [0.9.4]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Prepare (Linux)
+      if: startsWith(matrix.os , 'ubuntu')
+      run: |
+        pip3 install setuptools wheel
+        pip3 install conan
+        sudo ln -s ~/.local/bin/conan /usr/local/bin/conan
+        conan profile new --detect default
+        conan profile update settings.compiler.libcxx=libstdc++11 default
+    
+    - name: Prepare (Windows)
+      if: startsWith(matrix.os , 'windows')
+      shell: cmd
+      run: |
+        pip install conan
+        call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64
+        
+    - name: Build
+      run: conan create . libssh/${{ matrix.version }}@infactum/stable
+    
+    - name: Publish
+      run: |
+        conan remote add bintray https://api.bintray.com/conan/infactum/public-conan 
+        conan user -p ${{ secrets.API_KEY }} -r bintray infactum
+        conan upload "libssh/*" --confirm -r bintray --all
